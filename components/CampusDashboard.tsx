@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import OverviewSection from '@/components/OverviewSection';
 import SchedulesSection from '@/components/SchedulesSection';
@@ -19,6 +19,7 @@ import {
   Booking
 } from '@/types';
 import { Bot, Check, AlertCircle } from 'lucide-react';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface CampusDashboardProps {
   initialSchedules: Schedule[];
@@ -71,6 +72,24 @@ export default function CampusDashboard({
       console.error('Error refreshing data:', err);
     }
   }, []);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel('campus-records-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedules' }, fetchAllData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, fetchAllData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, fetchAllData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, fetchAllData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, fetchAllData)
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchAllData]);
 
   // Reset database back to default seed data
   const handleResetData = async () => {
