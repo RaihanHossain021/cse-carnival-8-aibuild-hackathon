@@ -13,7 +13,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const result = bookRoom(room_number, {
+    const result = await bookRoom(room_number, {
       booked_by: booked_by || 'Student',
       date,
       start_time,

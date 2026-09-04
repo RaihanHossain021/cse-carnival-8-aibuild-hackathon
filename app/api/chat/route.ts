@@ -111,10 +111,10 @@ const GEMINI_TOOLS = [
 ];
 
 // Tool execution implementation
-function executeTool(name: string, args: any): { result: any; dataMutated?: boolean } {
+async function executeTool(name: string, args: any): Promise<{ result: any; dataMutated?: boolean }> {
   switch (name) {
     case 'get_schedules': {
-      let data = getSchedules();
+      let data = await getSchedules();
       if (args.day) {
         data = data.filter((s) => s.day.toLowerCase() === args.day.toLowerCase());
       }
@@ -131,7 +131,7 @@ function executeTool(name: string, args: any): { result: any; dataMutated?: bool
     }
 
     case 'get_rooms': {
-      let data = getRooms();
+      let data = await getRooms();
       if (args.type) {
         data = data.filter((r) => r.type.toLowerCase() === args.type.toLowerCase());
       }
@@ -159,7 +159,7 @@ function executeTool(name: string, args: any): { result: any; dataMutated?: bool
     }
 
     case 'book_room': {
-      const res = bookRoom(args.room_number, {
+      const res = await bookRoom(args.room_number, {
         date: args.date,
         start_time: args.start_time,
         end_time: args.end_time,
@@ -170,7 +170,7 @@ function executeTool(name: string, args: any): { result: any; dataMutated?: bool
     }
 
     case 'get_events': {
-      let data = getEvents();
+      let data = await getEvents();
       if (args.date) {
         data = data.filter((e) => e.date === args.date);
       }
@@ -181,7 +181,7 @@ function executeTool(name: string, args: any): { result: any; dataMutated?: bool
     }
 
     case 'register_event': {
-      const res = registerForEvent(args.event_id, {
+      const res = await registerForEvent(args.event_id, {
         student_id: args.student_id,
         name: args.name,
       });
@@ -189,7 +189,7 @@ function executeTool(name: string, args: any): { result: any; dataMutated?: bool
     }
 
     case 'get_announcements': {
-      let data = getAnnouncements();
+      let data = await getAnnouncements();
       if (args.priority) {
         data = data.filter((a) => a.priority.toLowerCase() === args.priority.toLowerCase());
       }
@@ -197,7 +197,7 @@ function executeTool(name: string, args: any): { result: any; dataMutated?: bool
     }
 
     case 'get_assignments': {
-      let data = getAssignments();
+      let data = await getAssignments();
       if (args.course) {
         data = data.filter((a) => a.course.toLowerCase().includes(args.course.toLowerCase()));
       }
@@ -246,7 +246,7 @@ function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]
       ? 'Tuesday'
       : 'Thursday';
 
-    const classes = getSchedules().filter((s) => s.day.toLowerCase() === day.toLowerCase()).sort((a, b) => a.start_time.localeCompare(b.start_time));
+    const classes = (await getSchedules()).filter((s) => s.day.toLowerCase() === day.toLowerCase()).sort((a, b) => a.start_time.localeCompare(b.start_time));
     toolCalls.push({ name: 'get_schedules', args: { day } });
 
     if (classes.length === 0) {
@@ -263,7 +263,7 @@ function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]
 
   // 3. "What assignments do I have due this week?"
   if (q.includes('assignment') || q.includes('due this week') || q.includes('deadlines')) {
-    const asgns = getAssignments();
+    const asgns = await getAssignments();
     toolCalls.push({ name: 'get_assignments', args: { status: 'pending' } });
     const pending = asgns.filter((a) => a.status === 'pending');
 
@@ -281,7 +281,7 @@ function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]
 
   // 4. "Show me all high priority announcements."
   if (q.includes('announcement') || q.includes('notices') || q.includes('high priority')) {
-    const notices = getAnnouncements();
+    const notices = await getAnnouncements();
     toolCalls.push({ name: 'get_announcements', args: { priority: 'high' } });
     const high = notices.filter((n) => n.priority === 'high');
 
@@ -298,7 +298,7 @@ function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]
     toolCalls.push({ name: 'get_schedules', args: { day: 'Sunday' } });
     toolCalls.push({ name: 'get_events', args: { status: 'upcoming' } });
 
-    const events = getEvents().filter((e) => e.status === 'upcoming' || e.status === 'ongoing');
+    const events = (await getEvents()).filter((e) => e.status === 'upcoming' || e.status === 'ongoing');
     if (events.length > 0) {
       const e = events[0];
       return {
@@ -312,7 +312,7 @@ function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]
   // 6. "Which labs have a projector and can fit at least 30 people?"
   if (q.includes('lab') && (q.includes('projector') || q.includes('30'))) {
     toolCalls.push({ name: 'get_rooms', args: { type: 'lab', min_capacity: 30, equipment: 'projector' } });
-    const rooms = getRooms().filter(
+    const rooms = (await getRooms()).filter(
       (r) =>
         r.type.toLowerCase() === 'lab' &&
         r.capacity >= 30 &&
@@ -349,7 +349,7 @@ function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]
       },
     });
 
-    const res = bookRoom('7A02', {
+    const res = await bookRoom('7A02', {
       date: dateStr,
       start_time: '15:00',
       end_time: '17:00',
@@ -375,7 +375,7 @@ function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]
 
   // 8. "Register me for the Guest Lecture on Deep Learning."
   if (q.includes('register') && (q.includes('deep learning') || q.includes('guest lecture'))) {
-    const events = getEvents();
+    const events = await getEvents();
     const target = events.find((e) => e.name.toLowerCase().includes('deep learning') || e.name.toLowerCase().includes('guest lecture'));
 
     if (!target) {
@@ -387,7 +387,7 @@ function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]
       args: { event_id: target.id, student_id: '20-40532', name: 'Student' },
     });
 
-    const res = registerForEvent(target.id, { student_id: '20-40532', name: 'Student' });
+    const res = await registerForEvent(target.id, { student_id: '20-40532', name: 'Student' });
     if (res.success) {
       dataMutated = true;
       return {

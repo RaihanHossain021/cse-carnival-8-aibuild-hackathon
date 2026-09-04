@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "db:seed": "node --env-file=.env.local scripts/seed-supabase.mjs"
   },
   "repository": {
     "type": "git",

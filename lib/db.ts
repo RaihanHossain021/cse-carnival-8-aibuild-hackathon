@@ -1,12 +1,14 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
+import { createClient } from '@supabase/supabase-js';
 import { Schedule, Room, Event, Announcement, Assignment, Booking, Registration } from '@/types';
 import { supabase } from './supabase';
 
-const SEED_DIR = path.join(process.cwd(), 'data');
-const STORAGE_DIR = path.join(process.cwd(), 'storage');
+type Collection = 'schedules' | 'rooms' | 'events' | 'announcements' | 'assignments';
+type StoredRecord = { id: string; record: unknown };
 
-const FILES = {
+const SEED_DIR = path.join(process.cwd(), 'data');
+const FILES: Record<Collection, string> = {
   schedules: 'schedules.json',
   rooms: 'rooms.json',
   events: 'events.json',
@@ -72,39 +74,34 @@ export function initDatabase() {
       }
     }
   }
+  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
-function readStorage<T>(filename: string): T[] {
-  initDatabase();
-  const filePath = path.join(STORAGE_DIR, filename);
-  try {
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error(`Error reading ${filename}:`, err);
-    return [];
-  }
+async function readCollection<T>(collection: Collection): Promise<T[]> {
+  const { data, error } = await supabase()
+    .from(collection)
+    .select('record');
+  if (error) throw new Error(`Supabase read failed for ${collection}: ${error.message}`);
+  return (data as Pick<StoredRecord, 'record'>[]).map((item) => item.record as T);
 }
 
-function writeStorage<T>(filename: string, data: T[]): void {
-  initDatabase();
-  const filePath = path.join(STORAGE_DIR, filename);
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+async function writeCollection<T extends { id: string }>(collection: Collection, items: T[]): Promise<void> {
+  const client = supabase();
+  const rows = items.map((record) => ({ id: record.id, record, updated_at: new Date().toISOString() }));
+  const { error: deleteError } = await client.from(collection).delete().neq('id', '');
+  if (deleteError) throw new Error(`Supabase clear failed for ${collection}: ${deleteError.message}`);
+  if (rows.length === 0) return;
+  const { error } = await client.from(collection).insert(rows);
+  if (error) throw new Error(`Supabase write failed for ${collection}: ${error.message}`);
 }
 
-// Reset database back to seed data if ever needed
-export function resetToSeed(): void {
-  if (!fs.existsSync(STORAGE_DIR)) {
-    fs.mkdirSync(STORAGE_DIR, { recursive: true });
-  }
-  for (const [key, filename] of Object.entries(FILES)) {
-    const targetFile = path.join(STORAGE_DIR, filename);
-    const seedFile = path.join(SEED_DIR, filename);
-    if (fs.existsSync(seedFile)) {
-      const content = fs.readFileSync(seedFile, 'utf-8');
-      fs.writeFileSync(targetFile, content, 'utf-8');
-    }
-  }
+async function updateRecord<T extends { id: string }>(collection: Collection, id: string, updates: Partial<T>): Promise<T | null> {
+  const items = await readCollection<T>(collection);
+  const index = items.findIndex((item) => item.id === id);
+  if (index === -1) return null;
+  items[index] = { ...items[index], ...updates };
+  await writeCollection(collection, items);
+  return items[index];
 }
 
 // --- SCHEDULES ---
@@ -143,12 +140,9 @@ export function deleteSchedule(id: string): boolean {
   return true;
 }
 
-// --- ROOMS ---
-export function getRooms(): Room[] {
-  return readStorage<Room>(FILES.rooms);
-}
-export function saveRooms(items: Room[]): void {
-  writeStorage<Room>(FILES.rooms, items);
+async function seedCollection<T extends { id: string }>(collection: Collection): Promise<T[]> {
+  const contents = await fs.readFile(path.join(SEED_DIR, FILES[collection]), 'utf-8');
+  return JSON.parse(contents) as T[];
 }
 export function addRoom(item: Omit<Room, 'id' | 'bookings'> & { id?: string; bookings?: Booking[] }): Room {
   const items = getRooms();
@@ -197,14 +191,21 @@ export function bookRoom(
            Math.min(timeToMinutes(b.end_time), timeToMinutes(booking.end_time));
   });
 
-  if (collision) {
-    return { success: false, message: `Room ${room.room_number} is already booked during this time on ${booking.date}.` };
+export async function resetToSeed(): Promise<void> {
+  for (const collection of Object.keys(FILES) as Collection[]) {
+    await writeCollection(collection, await seedCollection(collection));
   }
+}
 
-  const newBooking: Booking = {
-    ...booking,
-    booking_id: booking.booking_id || `bk-${Date.now().toString().slice(-4)}`,
-  };
+export async function getSchedules(): Promise<Schedule[]> { return readCollection<Schedule>('schedules'); }
+export async function saveSchedules(items: Schedule[]): Promise<void> { return writeCollection('schedules', items); }
+export async function addSchedule(item: Omit<Schedule, 'id'> & { id?: string }): Promise<Schedule> {
+  const newItem = { ...item, id: item.id || `sch-${Date.now().toString().slice(-4)}` } as Schedule;
+  await saveSchedules([...(await getSchedules()), newItem]);
+  return newItem;
+}
+export async function updateSchedule(id: string, updates: Partial<Schedule>): Promise<Schedule | null> { return updateRecord('schedules', id, updates); }
+export async function deleteSchedule(id: string): Promise<boolean> { return deleteRecord<Schedule>('schedules', id); }
 
   room.bookings = room.bookings || [];
   room.bookings.push(newBooking);
@@ -212,9 +213,8 @@ export function bookRoom(
   syncToSupabase('rooms', room.id, room);
   return { success: true, message: `Room ${room.room_number} booked successfully!`, booking: newBooking };
 }
-
-export function cancelBooking(bookingId: string): { success: boolean; message: string } {
-  const rooms = getRooms();
+export async function cancelBooking(bookingId: string): Promise<{ success: boolean; message: string }> {
+  const rooms = await getRooms();
   let found = false;
   let targetRoom: Room | null = null;
   for (const room of rooms) {
@@ -233,7 +233,9 @@ export function cancelBooking(bookingId: string): { success: boolean; message: s
     syncToSupabase('rooms', targetRoom.id, targetRoom);
     return { success: true, message: `Booking ${bookingId} cancelled successfully.` };
   }
-  return { success: false, message: `Booking ${bookingId} not found.` };
+  if (!found) return { success: false, message: `Booking ${bookingId} not found.` };
+  await saveRooms(rooms);
+  return { success: true, message: `Booking ${bookingId} cancelled successfully.` };
 }
 
 // --- EVENTS ---
@@ -287,16 +289,13 @@ export function registerForEvent(
   }
   if (event.registered >= event.capacity) {
     event.status = 'full';
-    saveEvents(events);
+    await saveEvents(events);
     return { success: false, message: `Event '${event.name}' is already at full capacity (${event.capacity} seats).` };
   }
-
   event.registrations = event.registrations || [];
-  const already = event.registrations.some((r) => r.student_id === registration.student_id);
-  if (already) {
+  if (event.registrations.some((item) => item.student_id === registration.student_id)) {
     return { success: false, message: `Student ${registration.student_id} is already registered for this event.` };
   }
-
   event.registrations.push(registration);
   event.registered = event.registrations.length;
   if (event.registered >= event.capacity) {
@@ -402,9 +401,8 @@ export function deleteAssignment(id: string): boolean {
   return true;
 }
 
-// Helper: Convert "HH:MM" to minutes from 00:00
 export function timeToMinutes(timeStr: string): number {
   if (!timeStr) return 0;
-  const [h, m] = timeStr.split(':').map(Number);
-  return (h || 0) * 60 + (m || 0);
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return (hours || 0) * 60 + (minutes || 0);
 }
