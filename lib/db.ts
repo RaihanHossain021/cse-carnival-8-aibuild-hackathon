@@ -1,10 +1,13 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { Schedule, Room, Event, Announcement, Assignment, Booking, Registration } from '@/types';
 import { supabase } from './supabase';
 
 const SEED_DIR = path.join(process.cwd(), 'data');
-const STORAGE_DIR = path.join(process.cwd(), 'storage');
+const STORAGE_DIR = process.env.VERCEL
+  ? path.join(os.tmpdir(), 'campusos_storage')
+  : path.join(process.cwd(), 'storage');
 
 const FILES = {
   schedules: 'schedules.json',
