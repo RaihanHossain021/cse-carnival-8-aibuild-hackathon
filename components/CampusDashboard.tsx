@@ -370,6 +370,11 @@ export default function CampusDashboard({
             announcements={announcements}
             assignments={assignments}
             setActiveSection={setActiveSection}
+            onBookRoom={handleBookRoom}
+            onCancelBooking={handleCancelBooking}
+            onRegisterEvent={handleRegisterEvent}
+            onCancelRegistration={handleCancelRegistration}
+            onUpdateAssignment={handleUpdateAssignment}
           />
         )}
 
