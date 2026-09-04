@@ -1,48 +1,5 @@
 [
   {
-    "id": "room-001",
-    "type": "classroom",
-    "floor": 7,
-    "status": "available",
-    "bookings": [],
-    "capacity": 40,
-    "equipment": [
-      "whiteboard",
-      "projector",
-      "AC"
-    ],
-    "room_number": "7A01"
-  },
-  {
-    "id": "room-002",
-    "type": "classroom",
-    "floor": 7,
-    "status": "available",
-    "bookings": [],
-    "capacity": 40,
-    "equipment": [
-      "whiteboard",
-      "projector",
-      "AC"
-    ],
-    "room_number": "7A02"
-  },
-  {
-    "id": "room-003",
-    "type": "classroom",
-    "floor": 7,
-    "status": "available",
-    "bookings": [],
-    "capacity": 45,
-    "equipment": [
-      "whiteboard",
-      "projector",
-      "AC",
-      "smart board"
-    ],
-    "room_number": "7A03"
-  },
-  {
     "id": "room-004",
     "type": "classroom",
     "floor": 7,
@@ -107,21 +64,6 @@
       "document camera"
     ],
     "room_number": "7A07"
-  },
-  {
-    "id": "room-008",
-    "type": "lab",
-    "floor": 7,
-    "status": "available",
-    "bookings": [],
-    "capacity": 30,
-    "equipment": [
-      "computers",
-      "AC",
-      "projector",
-      "whiteboard"
-    ],
-    "room_number": "7B01"
   },
   {
     "id": "room-009",
@@ -318,5 +260,81 @@
       "smart board"
     ],
     "room_number": "7C05"
+  },
+  {
+    "id": "room-002",
+    "type": "classroom",
+    "floor": 7,
+    "status": "available",
+    "bookings": [],
+    "capacity": 40,
+    "equipment": [
+      "whiteboard",
+      "projector",
+      "AC"
+    ],
+    "room_number": "7A02"
+  },
+  {
+    "id": "room-003",
+    "type": "classroom",
+    "floor": 7,
+    "status": "available",
+    "bookings": [],
+    "capacity": 45,
+    "equipment": [
+      "whiteboard",
+      "projector",
+      "AC",
+      "smart board"
+    ],
+    "room_number": "7A03"
+  },
+  {
+    "id": "room-001",
+    "type": "classroom",
+    "floor": 7,
+    "status": "booked",
+    "bookings": [
+      {
+        "date": "2026-09-08",
+        "purpose": "AUST PIC seminar on agentic AI system",
+        "end_time": "16:00",
+        "booked_by": "Raihan (AUST PIC Administration Head)",
+        "booking_id": "bk-5854",
+        "start_time": "14:00"
+      }
+    ],
+    "capacity": 40,
+    "equipment": [
+      "whiteboard",
+      "projector",
+      "AC"
+    ],
+    "room_number": "7A01"
+  },
+  {
+    "id": "room-008",
+    "type": "lab",
+    "floor": 7,
+    "status": "booked",
+    "bookings": [
+      {
+        "date": "2026-09-07",
+        "purpose": "AUST PIC Seminar",
+        "end_time": "16:00",
+        "booked_by": "Raihan (AUST PIC Administration Head)",
+        "booking_id": "bk-3837",
+        "start_time": "14:00"
+      }
+    ],
+    "capacity": 30,
+    "equipment": [
+      "computers",
+      "AC",
+      "projector",
+      "whiteboard"
+    ],
+    "room_number": "7B01"
   }
 ]

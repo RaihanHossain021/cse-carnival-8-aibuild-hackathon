@@ -38,6 +38,7 @@ export default function RoomsSection({
   onCancelBooking,
 }: RoomsSectionProps) {
   const [selectedType, setSelectedType] = useState<string>('All');
+  const [statusFilter, setStatusFilter] = useState<string>('All');
   const [equipmentFilter, setEquipmentFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -135,13 +136,14 @@ export default function RoomsSection({
 
   const filtered = rooms.filter((r) => {
     const matchesType = selectedType === 'All' || r.type.toLowerCase() === selectedType.toLowerCase();
+    const matchesStatus = statusFilter === 'All' || r.status.toLowerCase() === statusFilter.toLowerCase();
     const matchesEquipment =
       equipmentFilter === 'All' ||
       (r.equipment && r.equipment.some((eq) => eq.toLowerCase() === equipmentFilter.toLowerCase()));
     const matchesSearch =
       r.room_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.type.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesType && matchesEquipment && matchesSearch;
+    return matchesType && matchesStatus && matchesEquipment && matchesSearch;
   });
 
   return (
@@ -182,6 +184,28 @@ export default function RoomsSection({
                 }`}
               >
                 {type}
+              </button>
+            ))}
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex items-center space-x-1 border-l border-slate-200 dark:border-slate-700 pl-2">
+            <span className="text-[11px] text-slate-400">Status:</span>
+            {['All', 'available', 'booked'].map((st) => (
+              <button
+                key={st}
+                onClick={() => setStatusFilter(st)}
+                className={`px-2 py-1 rounded text-[11px] font-medium capitalize transition-all ${
+                  statusFilter === st
+                    ? st === 'available'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : st === 'booked'
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 shadow-sm'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                {st}
               </button>
             ))}
           </div>
@@ -273,9 +297,11 @@ export default function RoomsSection({
                     </div>
                     <div>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
                           room.status === 'available'
                             ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/80 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                            : room.status === 'booked'
+                            ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/80 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
                             : 'bg-rose-50 text-rose-600 dark:bg-rose-950/80 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
                         }`}
                       >
@@ -331,13 +357,19 @@ export default function RoomsSection({
 
                 {/* Book Action Button */}
                 <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <button
-                    onClick={() => openBookingModal(room)}
-                    className="w-full py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs font-bold border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all flex items-center justify-center space-x-1.5"
-                  >
-                    <CalendarCheck className="w-3.5 h-3.5" />
-                    <span>Book This Room</span>
-                  </button>
+                  {room.status === 'booked' ? (
+                    <div className="w-full py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-xs font-semibold text-center border border-amber-200 dark:border-amber-800/60">
+                      Currently Reserved
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => openBookingModal(room)}
+                      className="w-full py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs font-bold border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all flex items-center justify-center space-x-1.5"
+                    >
+                      <CalendarCheck className="w-3.5 h-3.5" />
+                      <span>Book This Room</span>
+                    </button>
+                  )}
                 </div>
               </div>
             );
