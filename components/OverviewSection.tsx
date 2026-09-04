@@ -219,7 +219,13 @@ export default function OverviewSection({
   };
 
   return (
-    <div className="space-y-8 animate-fadeIn">
+    <div className="space-y-8 animate-fadeIn relative">
+      {/* Ambient Campus Background Watermark */}
+      <div
+        className="fixed inset-0 pointer-events-none -z-10 opacity-[0.04] dark:opacity-[0.07] bg-cover bg-center bg-no-repeat transition-opacity duration-300"
+        style={{ backgroundImage: "url('/aust-campus.jpg')" }}
+      />
+
       {/* Action Notification Toast */}
       {actionNotice && (
         <div className="fixed top-20 right-6 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl bg-emerald-600 text-white text-xs font-semibold shadow-2xl animate-bounce">
@@ -228,24 +234,30 @@ export default function OverviewSection({
         </div>
       )}
 
-      {/* Hero Central Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-sky-600 via-indigo-600 to-purple-700 p-6 sm:p-8 text-white shadow-2xl shadow-sky-500/15">
-        <div className="relative z-10 max-w-3xl space-y-3">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-semibold">
+      {/* Hero Central Header with AUST Campus Background */}
+      <div
+        className="relative overflow-hidden rounded-3xl p-6 sm:p-10 text-white shadow-2xl shadow-sky-950/20 border border-slate-700/30 min-h-[310px] flex flex-col justify-center bg-cover bg-center"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, rgba(15, 23, 42, 0.93) 0%, rgba(15, 23, 42, 0.82) 45%, rgba(30, 27, 75, 0.65) 100%), url('/aust-campus.jpg')",
+        }}
+      >
+        <div className="relative z-10 max-w-3xl space-y-3.5">
+          <div className="inline-flex items-center space-x-2 px-3.5 py-1 rounded-full bg-sky-500/20 backdrop-blur-md text-xs font-semibold border border-sky-400/30 text-sky-200">
             <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-spin" />
-            <span>CampusOS · Central Operations Hub</span>
+            <span>Ahsanullah University of Science and Technology · CampusOS</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white drop-shadow-md">
             Campus Information & Live Control Center
           </h1>
-          <p className="text-sky-100 text-sm sm:text-base leading-relaxed">
+          <p className="text-slate-200 text-sm sm:text-base leading-relaxed max-w-2xl drop-shadow">
             Real-time schedule timetable, room bookings, campus events, urgent notices, and coursework assignments — all 5 systems synchronized live.
           </p>
 
           <div className="flex flex-wrap gap-3 pt-2">
             <button
               onClick={() => setActiveSection('agent')}
-              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white text-sky-900 font-bold text-xs hover:bg-sky-50 transition-all shadow-lg active:scale-95"
+              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white text-slate-900 font-bold text-xs hover:bg-sky-50 transition-all shadow-lg active:scale-95"
             >
               <Bot className="w-4 h-4 text-sky-600" />
               <span>Ask AI Senior Assistant</span>
@@ -256,7 +268,7 @@ export default function OverviewSection({
                 const el = document.getElementById('rooms-module');
                 el?.scrollIntoView({ behavior: 'smooth' });
               }}
-              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-semibold text-xs backdrop-blur-md transition-all border border-white/20"
+              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-semibold text-xs backdrop-blur-md transition-all border border-white/20 shadow-md"
             >
               <DoorOpen className="w-4 h-4" />
               <span>Check Rooms & Labs</span>
@@ -264,8 +276,11 @@ export default function OverviewSection({
           </div>
         </div>
 
-        {/* Background decorative styling */}
-        <div className="absolute right-0 top-0 bottom-0 w-96 bg-gradient-to-l from-white/10 to-transparent pointer-events-none" />
+        {/* Live Campus Badge */}
+        <div className="absolute right-4 bottom-4 z-10 hidden sm:flex items-center space-x-2 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md text-[11px] text-slate-300 border border-white/15 shadow-sm">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          <span>AUST Campus Live</span>
+        </div>
       </div>
 
       {/* 5 Core Metric Cards */}
