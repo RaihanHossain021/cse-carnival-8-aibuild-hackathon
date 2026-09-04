@@ -179,10 +179,10 @@ export function deleteRoom(id: string): boolean {
   syncToSupabase('rooms', id, null, 'delete');
   return true;
 }
-export function bookRoom(
+export async function bookRoom(
   roomNumber: string,
   booking: Omit<Booking, 'booking_id'> & { booking_id?: string }
-): { success: boolean; message: string; booking?: Booking } {
+): Promise<{ success: boolean; message: string; booking?: Booking }> {
   const rooms = getRooms();
   const room = rooms.find((r) => r.room_number.toLowerCase() === roomNumber.toLowerCase() || r.id === roomNumber);
   if (!room) {
@@ -208,12 +208,13 @@ export function bookRoom(
 
   room.bookings = room.bookings || [];
   room.bookings.push(newBooking);
+  room.status = 'booked';
   saveRooms(rooms);
-  syncToSupabase('rooms', room.id, room);
+  await syncToSupabase('rooms', room.id, room);
   return { success: true, message: `Room ${room.room_number} booked successfully!`, booking: newBooking };
 }
 
-export function cancelBooking(bookingId: string): { success: boolean; message: string } {
+export async function cancelBooking(bookingId: string): Promise<{ success: boolean; message: string }> {
   const rooms = getRooms();
   let found = false;
   let targetRoom: Room | null = null;
@@ -224,13 +225,16 @@ export function cancelBooking(bookingId: string): { success: boolean; message: s
       if (room.bookings.length < initLen) {
         found = true;
         targetRoom = room;
+        if (room.bookings.length === 0) {
+          targetRoom.status = 'available';
+        }
         break;
       }
     }
   }
   if (found && targetRoom) {
     saveRooms(rooms);
-    syncToSupabase('rooms', targetRoom.id, targetRoom);
+    await syncToSupabase('rooms', targetRoom.id, targetRoom);
     return { success: true, message: `Booking ${bookingId} cancelled successfully.` };
   }
   return { success: false, message: `Booking ${bookingId} not found.` };

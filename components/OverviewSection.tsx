@@ -96,6 +96,7 @@ export default function OverviewSection({
     : null;
 
   // Room booking modal state
+  const [roomAvailabilityFilter, setRoomAvailabilityFilter] = useState<'all' | 'available' | 'booked'>('all');
   const [bookingRoomTarget, setBookingRoomTarget] = useState<Room | null>(null);
   const [bookingFormData, setBookingFormData] = useState({
     booked_by: '',
@@ -142,6 +143,8 @@ export default function OverviewSection({
   });
 
   const filteredRooms = rooms.filter((r) => {
+    if (roomAvailabilityFilter === 'available' && r.status !== 'available') return false;
+    if (roomAvailabilityFilter === 'booked' && r.status === 'available') return false;
     if (!q) return true;
     return (
       r.room_number.toLowerCase().includes(q) ||
@@ -599,13 +602,48 @@ export default function OverviewSection({
               </div>
             </div>
 
-            <button
-              onClick={() => setActiveSection('rooms')}
-              className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center space-x-1 self-start sm:self-auto"
-            >
-              <span>View All Rooms & Full Management</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800/80 p-1 text-xs">
+                <button
+                  onClick={() => setRoomAvailabilityFilter('all')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                    roomAvailabilityFilter === 'all'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  All ({rooms.length})
+                </button>
+                <button
+                  onClick={() => setRoomAvailabilityFilter('available')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                    roomAvailabilityFilter === 'available'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  Available ({availableRooms})
+                </button>
+                <button
+                  onClick={() => setRoomAvailabilityFilter('booked')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                    roomAvailabilityFilter === 'booked'
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  Booked ({rooms.length - availableRooms})
+                </button>
+              </div>
+
+              <button
+                onClick={() => setActiveSection('rooms')}
+                className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center space-x-1"
+              >
+                <span>Full Management</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1498,17 +1536,28 @@ export default function OverviewSection({
 
             {/* In-Modal Booking Action */}
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => {
-                  setSelectedRoomDetails(null);
-                  setBookingRoomTarget(activeRoom);
-                  setBookingStatus({});
-                }}
-                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-bold text-xs transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center space-x-2"
-              >
-                <CalendarCheck className="w-4 h-4" />
-                <span>Reserve Room {activeRoom.room_number} Now</span>
-              </button>
+              {activeRoom.status !== 'available' ? (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-center space-y-1">
+                  <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                    ⚠️ Room {activeRoom.room_number} is currently booked
+                  </p>
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                    This room cannot be double-booked. Cancel active reservation above to free it.
+                  </p>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setSelectedRoomDetails(null);
+                    setBookingRoomTarget(activeRoom);
+                    setBookingStatus({});
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-bold text-xs transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center space-x-2"
+                >
+                  <CalendarCheck className="w-4 h-4" />
+                  <span>Reserve Room {activeRoom.room_number} Now</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

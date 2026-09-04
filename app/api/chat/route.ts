@@ -106,12 +106,23 @@ const GEMINI_TOOLS = [
           },
         },
       },
+      {
+        name: 'cancel_booking',
+        description: 'Cancel an existing room reservation by its booking ID.',
+        parameters: {
+          type: Type.OBJECT,
+          required: ['booking_id'],
+          properties: {
+            booking_id: { type: Type.STRING, description: 'Booking ID (e.g. bk-1234)' },
+          },
+        },
+      },
     ],
   },
 ];
 
 // Tool execution implementation
-function executeTool(name: string, args: any): { result: any; dataMutated?: boolean } {
+async function executeTool(name: string, args: any): Promise<{ result: any; dataMutated?: boolean }> {
   switch (name) {
     case 'get_schedules': {
       let data = getSchedules();
@@ -143,8 +154,12 @@ function executeTool(name: string, args: any): { result: any; dataMutated?: bool
           r.equipment?.some((eq) => eq.toLowerCase().includes(args.equipment.toLowerCase()))
         );
       }
+      if (args.status) {
+        data = data.filter((r) => r.status.toLowerCase() === args.status.toLowerCase());
+      }
       if (args.date && args.start_time && args.end_time) {
         data = data.filter((r) => {
+          if (r.status !== 'available') return false;
           const hasOverlap = r.bookings?.some((b) => {
             if (b.date !== args.date) return false;
             return (
@@ -159,13 +174,18 @@ function executeTool(name: string, args: any): { result: any; dataMutated?: bool
     }
 
     case 'book_room': {
-      const res = bookRoom(args.room_number, {
+      const res = await bookRoom(args.room_number, {
         date: args.date,
         start_time: args.start_time,
         end_time: args.end_time,
         booked_by: args.booked_by || 'Student',
         purpose: args.purpose || 'Study/Meeting',
       });
+      return { result: res, dataMutated: res.success };
+    }
+
+    case 'cancel_booking': {
+      const res = await cancelBooking(args.booking_id);
       return { result: res, dataMutated: res.success };
     }
 
@@ -246,6 +266,12 @@ function solveVacantRooms(query: string) {
   const availableRooms = rooms.filter((r) => {
     if (occupiedRooms.has(r.room_number.toUpperCase())) return false;
     if (r.status !== 'available') return false;
+    const hasBookingOverlap = r.bookings?.some((b) => {
+      const start = timeToMinutes(b.start_time);
+      const end = timeToMinutes(b.end_time);
+      return queryMin >= start && queryMin < end;
+    });
+    if (hasBookingOverlap) return false;
     return true;
   });
 
@@ -281,7 +307,7 @@ function solveVacantRooms(query: string) {
 }
 
 // Built-in intelligent campus query solver (guarantees zero failure if API key is invalid/rate-limited)
-function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]; dataMutated: boolean } {
+async function smartCampusSolver(userQuery: string): Promise<{ reply: string; toolCalls: any[]; dataMutated: boolean }> {
   const q = userQuery.toLowerCase();
   const toolCalls: any[] = [];
   let dataMutated = false;
@@ -422,7 +448,7 @@ function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]
       },
     });
 
-    const res = bookRoom('7A02', {
+    const res = await bookRoom('7A02', {
       date: dateStr,
       start_time: '15:00',
       end_time: '17:00',
@@ -517,19 +543,16 @@ function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]
   }
 
   // 12. "Where is my [Course] class today?" or class relocations (Problem Statement Section 6)
-  if (q.includes('where is') || q.includes('class today') || q.includes('moved') || q.includes('cancelled')) {
+  if (q.includes('where is') || q.includes('class today') || q.includes('moved') || q.includes('cancelled') || q.includes('relocation')) {
     const notices = getAnnouncements();
-    // Check if any announcement mentions the course or relocation
     const matchNotice = notices.find((n) => {
       const titleLow = n.title.toLowerCase();
       const bodyLow = n.body.toLowerCase();
       return (
-        titleLow.includes('moved') ||
-        titleLow.includes('cancelled') ||
-        titleLow.includes('relocation') ||
-        bodyLow.includes('moved') ||
-        bodyLow.includes('room') ||
-        (q.includes('cse') && (titleLow.includes('cse') || bodyLow.includes('cse')))
+        (q.includes('4113') && (titleLow.includes('4113') || bodyLow.includes('4113'))) ||
+        (q.includes('moved') && (titleLow.includes('moved') || bodyLow.includes('moved'))) ||
+        (q.includes('cancelled') && (titleLow.includes('cancelled') || bodyLow.includes('cancelled'))) ||
+        (q.includes('relocation') && (titleLow.includes('relocation') || bodyLow.includes('relocation')))
       );
     });
 
@@ -554,19 +577,67 @@ function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]
     }
   }
 
-  // Fallback query over announcements
-  const notices = getAnnouncements();
-  const relevantNotice = notices.find((n) => n.title.toLowerCase().includes('cse') || n.body.toLowerCase().includes('cse'));
-  if (relevantNotice) {
+  // 13. Query by specific course (e.g. "CSE 4113", "CSE 4107", "Pattern Recognition", etc.)
+  const allSchedules = getSchedules();
+  const matchedCourse = allSchedules.filter((s) =>
+    q.includes(s.course.toLowerCase()) ||
+    q.includes(s.course.toLowerCase().replace(/\s+/g, '')) ||
+    q.includes(s.title.toLowerCase())
+  );
+  if (matchedCourse.length > 0) {
+    toolCalls.push({ name: 'get_schedules', args: { course: matchedCourse[0].course } });
+    const list = matchedCourse.map(
+      (s) => `- **${s.day} ${s.start_time}–${s.end_time}**: ${s.course} (${s.title}, Sec ${s.section}) in **Room ${s.room}** [Instructor: ${s.instructor}]`
+    ).join('\n');
     return {
-      reply: `📢 **Latest Update**: ${relevantNotice.body}\n\n*(Notice: "${relevantNotice.title}", Posted by ${relevantNotice.posted_by})*`,
-      toolCalls: [{ name: 'get_announcements', args: {} }],
+      reply: `Here are the timetable slots for **${matchedCourse[0].course}: ${matchedCourse[0].title}**:\n\n${list}`,
+      toolCalls,
       dataMutated: false,
     };
   }
 
+  // 14. Query by instructor
+  const matchedInstructor = allSchedules.find((s) =>
+    q.includes(s.instructor.toLowerCase()) ||
+    s.instructor.toLowerCase().split(' ').some((part) => part.length > 3 && q.includes(part))
+  );
+  if (matchedInstructor) {
+    const instructorClasses = allSchedules.filter((s) => s.instructor === matchedInstructor.instructor);
+    toolCalls.push({ name: 'get_schedules', args: { instructor: matchedInstructor.instructor } });
+    const list = instructorClasses.map(
+      (s) => `- **${s.day} ${s.start_time}–${s.end_time}**: ${s.course} (${s.title}) in **Room ${s.room}**`
+    ).join('\n');
+    return {
+      reply: `Here are the classes taught by **${matchedInstructor.instructor}**:\n\n${list}`,
+      toolCalls,
+      dataMutated: false,
+    };
+  }
+
+  // 15. Greetings & help
+  if (q.includes('hi') || q.includes('hello') || q.includes('hey') || q.includes('who are you') || q.includes('help')) {
+    return {
+      reply: `Hello! I am your **CampusOS AI Assistant** connected live to the AUST university database.\n\nYou can ask me:\n- 📅 **Class Timetables**: *"What classes do I have on Wednesday?"* or *"When is CSE 4113?"*\n- 🏫 **Room Availability**: *"Is there a room vacant on Monday at 11 AM?"* or *"Which labs have a projector?"*\n- ✍️ **Room Booking**: *"Book Room 7A02 tomorrow from 3 PM to 5 PM"*\n- 📢 **Campus Notices**: *"Show me high priority announcements"*\n- 📝 **Assignments**: *"What assignments are due this week?"*`,
+      toolCalls: [],
+      dataMutated: false,
+    };
+  }
+
+  // 16. Fallback query over announcements only if explicitly requested
+  if (q.includes('announcement') || q.includes('notice') || q.includes('relocation') || q.includes('bulletin')) {
+    const notices = getAnnouncements();
+    toolCalls.push({ name: 'get_announcements', args: {} });
+    const list = notices.slice(0, 3).map((n) => `### 📢 ${n.title}\n*Posted on ${n.date} by ${n.posted_by}*\n${n.body}`).join('\n\n---\n\n');
+    return {
+      reply: `Here are recent campus notices:\n\n${list}`,
+      toolCalls,
+      dataMutated: false,
+    };
+  }
+
+  // Final fallback: Intelligent guide
   return {
-    reply: `I checked the live campus database. You can ask me about class schedules (e.g. *"What classes on Wednesday?"*), filter rooms (e.g. *"Which labs have a projector?"*), check deadlines, notices, or ask me to book a room.`,
+    reply: `I searched the live campus database. You can ask me about class timetables (e.g. *"What classes on Wednesday?"*), filter rooms (e.g. *"Which labs have a projector?"*), check deadlines, notices, or ask me to book a room.`,
     toolCalls: [{ name: 'get_schedules', args: {} }],
     dataMutated: false,
   };
@@ -577,27 +648,46 @@ export async function POST(req: Request) {
     const { messages } = await req.json();
     const lastUserMsg = messages[messages.length - 1]?.content || '';
 
+    // Candidate models in order of priority (handles quota exhaustion gracefully)
+    const CANDIDATE_MODELS = [
+      'gemini-3.5-flash',
+      'gemini-3.1-flash-lite',
+      'gemini-flash-latest',
+      'gemini-3.6-flash',
+    ];
+
     // Get API Key from environment
-    const apiKey = (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || '').trim();
+    const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY || '').trim();
 
     if (apiKey && apiKey !== 'your_key_here' && !apiKey.startsWith('your_')) {
-      try {
-        const ai = new GoogleGenAI({ apiKey });
+      const now = new Date();
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const currentDay = days[now.getDay()];
+      const currentDate = now.toISOString().split('T')[0];
+      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
-        const systemInstruction = `You are the CampusOS AI Assistant for Ahsanullah University (AUST).
-You have access to real-time tools for querying and mutating university databases:
-- Schedules (Sundays to Thursdays, 24h format HH:MM)
-- Rooms & Computer Labs (with bookings & equipment)
-- Events & Seminars (with attendee registrations & capacities)
-- Announcements & Notices (with priorities high/medium/low)
-- Coursework Assignments & Deadlines
+      const systemInstruction = `You are the CampusOS AI Assistant for Ahsanullah University (AUST).
+Current Date: ${currentDate} (${currentDay})
+Current Time: ${currentTime}
+University Timetable Schedule: Sunday to Thursday (Friday and Saturday are weekends).
+
+You have access to live tools for querying and mutating university databases:
+- Schedules: Class timetable by day (Sunday-Thursday), course code, instructor, room.
+- Rooms & Computer Labs: Capacity, equipment (projector, AC, whiteboard), type, and live availability.
+- Room Booking: Book a room (with conflict checking) and cancel bookings. Mutations sync in real time.
+- Events & Seminars: Campus workshops, attendee counts, and seat registration.
+- Announcements: Campus notices, room relocations, class updates.
+- Assignments: Upcoming project and homework deadlines.
 
 Rules:
-1. ALWAYS call tools to retrieve live information. Never invent data.
-2. If a user request is ambiguous (e.g., "book me any room"), ASK clarifying questions (time, capacity, equipment) rather than taking blind action.
-3. If an action fails (e.g. room collision or full event), explain clearly to the user.
-4. If a request is unauthorized (e.g., changing grades, exams), politely refuse.
-5. When asked where a class is or about schedule changes, check announcements for any room relocations or cancellations first!`;
+1. ALWAYS call tools to retrieve live database information. Never invent schedules, room availability, or notices.
+2. If a room is successfully booked, confirm the date, time, and room number.
+3. If an action fails (e.g. room collision or event at capacity), explain clearly.
+4. If a request is unauthorized (e.g. modifying grades or exams), politely decline.
+5. When asked where a class is or about changes, check announcements for any room relocations first!`;
+
+      try {
+        const ai = new GoogleGenAI({ apiKey });
 
         // Format history for Gemini SDK
         const contentsPayload = messages.map((m: any) => ({
@@ -605,79 +695,84 @@ Rules:
           parts: [{ text: m.content || '' }],
         }));
 
-        let currentContents = [...contentsPayload];
-        let anyMutated = false;
-        const allExecutedToolCalls: any[] = [];
-        let finalReply = '';
+        // Try candidate models in order
+        for (const modelName of CANDIDATE_MODELS) {
+          try {
+            let currentContents = [...contentsPayload];
+            let anyMutated = false;
+            const allExecutedToolCalls: any[] = [];
+            let finalReply = '';
 
-        // Multi-turn agentic loop (up to 3 turns)
-        for (let turn = 0; turn < 3; turn++) {
-          const response = await ai.models.generateContent({
-            model: 'gemini-3.6-flash',
-            contents: currentContents,
-            config: {
-              systemInstruction,
-              tools: GEMINI_TOOLS,
-            },
-          });
-
-          const functionCalls = response.functionCalls;
-
-          if (functionCalls && functionCalls.length > 0) {
-            // Append assistant model turn with function calls
-            if (response.candidates?.[0]?.content) {
-              currentContents.push(response.candidates[0].content);
-            }
-
-            // Execute all functions generated in this turn
-            const toolResponseParts: any[] = [];
-            for (const call of functionCalls) {
-              const funcName = call.name;
-              const funcArgs = call.args || {};
-              const { result, dataMutated } = executeTool(funcName, funcArgs);
-
-              if (dataMutated) anyMutated = true;
-
-              allExecutedToolCalls.push({
-                name: funcName,
-                args: funcArgs,
-                result,
-              });
-
-              toolResponseParts.push({
-                functionResponse: {
-                  name: funcName,
-                  response: { result },
-                  id: (call as any).id,
+            // Multi-turn agentic tool calling loop (up to 4 turns)
+            for (let turn = 0; turn < 4; turn++) {
+              const response = await ai.models.generateContent({
+                model: modelName,
+                contents: currentContents,
+                config: {
+                  systemInstruction,
+                  tools: GEMINI_TOOLS,
                 },
               });
+
+              const functionCalls = response.functionCalls;
+
+              if (functionCalls && functionCalls.length > 0) {
+                if (response.candidates?.[0]?.content) {
+                  currentContents.push(response.candidates[0].content);
+                }
+
+                const toolResponseParts: any[] = [];
+                for (const call of functionCalls) {
+                  const funcName = call.name;
+                  const funcArgs = call.args || {};
+                  const { result, dataMutated } = await executeTool(funcName, funcArgs);
+
+                  if (dataMutated) anyMutated = true;
+
+                  allExecutedToolCalls.push({
+                    name: funcName,
+                    args: funcArgs,
+                    result,
+                  });
+
+                  toolResponseParts.push({
+                    functionResponse: {
+                      name: funcName,
+                      response: { result },
+                      id: (call as any).id,
+                    },
+                  });
+                }
+
+                currentContents.push({
+                  role: 'user',
+                  parts: toolResponseParts,
+                });
+              } else {
+                finalReply = response.text || '';
+                break;
+              }
             }
 
-            // Append user turn containing functionResponse parts for ALL function calls
-            currentContents.push({
-              role: 'user',
-              parts: toolResponseParts,
-            });
-          } else {
-            finalReply = response.text || '';
-            break;
+            if (finalReply && finalReply.trim()) {
+              return NextResponse.json({
+                reply: finalReply,
+                toolCalls: allExecutedToolCalls,
+                dataMutated: anyMutated,
+              });
+            }
+          } catch (modelErr: any) {
+            console.warn(`Model ${modelName} call warning:`, modelErr.message);
+            // Continue to next candidate model
           }
         }
-
-        if (finalReply && finalReply.trim()) {
-          return NextResponse.json({
-            reply: finalReply,
-            toolCalls: allExecutedToolCalls,
-            dataMutated: anyMutated,
-          });
-        }
       } catch (geminiError: any) {
-        console.warn('Gemini API call warning, falling back to smart solver:', geminiError.message);
+        console.warn('Gemini client error, falling back to smart solver:', geminiError.message);
       }
     }
 
     // Fallback to built-in smart solver
-    const fallbackResult = smartCampusSolver(lastUserMsg);
+    const fallbackResult = await smartCampusSolver(lastUserMsg);
     return NextResponse.json(fallbackResult);
   } catch (err: any) {
     console.error('Chat API Error:', err);

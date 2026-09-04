@@ -130,7 +130,7 @@ export default function AgentSection({ onDataMutated }: { onDataMutated?: () => 
               </h3>
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse" />
-                Live Gemini 3.6 Flash
+                Live Gemini Flash (Connected)
               </span>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
