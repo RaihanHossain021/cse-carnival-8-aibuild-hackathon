@@ -13,7 +13,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const result = registerForEvent(event_id, { student_id, name });
+    const result = await registerForEvent(event_id, { student_id, name });
     if (!result.success) {
       return NextResponse.json({ error: result.message }, { status: 409 });
     }

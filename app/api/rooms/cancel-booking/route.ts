@@ -9,7 +9,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing booking_id' }, { status: 400 });
     }
 
-    const result = cancelBooking(booking_id);
+    const result = await cancelBooking(booking_id);
     if (!result.success) {
       return NextResponse.json({ error: result.message }, { status: 404 });
     }

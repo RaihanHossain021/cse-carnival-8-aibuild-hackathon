@@ -10,7 +10,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing event_id or student_id' }, { status: 400 });
     }
 
-    const result = cancelEventRegistration(event_id, student_id);
+    const result = await cancelEventRegistration(event_id, student_id);
     if (!result.success) {
       return NextResponse.json({ error: result.message }, { status: 404 });
     }
