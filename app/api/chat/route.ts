@@ -212,11 +212,84 @@ async function executeTool(name: string, args: any): Promise<{ result: any; data
   }
 }
 
+function parseTimeTo24h(str: string): string {
+  const match = str.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (!match) return '11:00';
+  let h = parseInt(match[1], 10);
+  const m = match[2] ? match[2] : '00';
+  const meridiem = match[3]?.toLowerCase();
+  if (meridiem === 'pm' && h < 12) h += 12;
+  if (meridiem === 'am' && h === 12) h = 0;
+  return `${h.toString().padStart(2, '0')}:${m}`;
+}
+
+function solveVacantRooms(query: string) {
+  const q = query.toLowerCase();
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const matchedDay = days.find((d) => q.includes(d.toLowerCase())) || 'Monday';
+
+  const timeMatch = q.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
+  const time24 = timeMatch ? parseTimeTo24h(timeMatch[1]) : '11:00';
+  const queryMin = timeToMinutes(time24);
+
+  const schedules = getSchedules();
+  const busySchedules = schedules.filter((s) => {
+    if (s.day.toLowerCase() !== matchedDay.toLowerCase()) return false;
+    const start = timeToMinutes(s.start_time);
+    const end = timeToMinutes(s.end_time);
+    return queryMin >= start && queryMin < end;
+  });
+
+  const occupiedRooms = new Set(busySchedules.map((s) => s.room.trim().toUpperCase()));
+
+  const rooms = getRooms();
+  const availableRooms = rooms.filter((r) => {
+    if (occupiedRooms.has(r.room_number.toUpperCase())) return false;
+    if (r.status !== 'available') return false;
+    return true;
+  });
+
+  const classrooms = availableRooms.filter((r) => r.type === 'classroom');
+  const labs = availableRooms.filter((r) => r.type === 'lab');
+  const seminars = availableRooms.filter((r) => r.type === 'seminar');
+
+  const classroomList = classrooms.map((c) => `* **Room ${c.room_number}** (Cap: ${c.capacity})`).join('\n');
+  const labList = labs.map((l) => `* **Room ${l.room_number}** (Cap: ${l.capacity})`).join('\n');
+  const seminarList = seminars.map((s) => `* **Room ${s.room_number}** (Cap: ${s.capacity})`).join('\n');
+
+  let reply = `Yes, there are **${availableRooms.length} rooms vacant** on **${matchedDay} at ${time24}**!\n\n`;
+  if (busySchedules.length > 0) {
+    const occupiedNames = Array.from(occupiedRooms).join(', ');
+    reply += `*Rooms currently occupied by scheduled classes: ${occupiedNames}*\n\n`;
+  } else {
+    reply += `*According to the timetable, there are no scheduled classes across the university during this hour.*\n\n`;
+  }
+
+  reply += `### 🏫 Classrooms (${classrooms.length} vacant)\n${classroomList}\n\n`;
+  reply += `### 🔬 Computer Labs (${labs.length} vacant)\n${labList}\n\n`;
+  reply += `### 🏛️ Seminar Rooms (${seminars.length} vacant)\n${seminarList}\n\n`;
+  reply += `Would you like me to book one of these rooms (e.g. **Room ${availableRooms[0]?.room_number || '7A01'}**) for you?`;
+
+  return {
+    reply,
+    toolCalls: [
+      { name: 'get_rooms', args: { start_time: time24 } },
+      { name: 'get_schedules', args: { day: matchedDay } },
+    ],
+    dataMutated: false,
+  };
+}
+
 // Built-in intelligent campus query solver (guarantees zero failure if API key is invalid/rate-limited)
 function smartCampusSolver(userQuery: string): { reply: string; toolCalls: any[]; dataMutated: boolean } {
   const q = userQuery.toLowerCase();
   const toolCalls: any[] = [];
   let dataMutated = false;
+
+  // 0. Vacancy / Availability Queries (e.g. "is there a room vacant on monday 11am")
+  if (q.includes('vacant') || q.includes('available') || q.includes('free room') || q.includes('empty room') || (q.includes('room') && (q.includes('free') || q.includes('open')))) {
+    return solveVacantRooms(userQuery);
+  }
 
   // 1. "When is my next class?"
   if (q.includes('next class')) {
@@ -532,70 +605,70 @@ Rules:
           parts: [{ text: m.content || '' }],
         }));
 
-        // Send full user request and tool declarations to Gemini 3.6 Flash
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.6-flash',
-          contents: contentsPayload,
-          config: {
-            systemInstruction,
-            tools: GEMINI_TOOLS,
-          },
-        });
+        let currentContents = [...contentsPayload];
+        let anyMutated = false;
+        const allExecutedToolCalls: any[] = [];
+        let finalReply = '';
 
-        const functionCalls = response.functionCalls;
-
-        if (functionCalls && functionCalls.length > 0) {
-          const executedToolCalls: any[] = [];
-          let anyMutated = false;
-
-          for (const call of functionCalls) {
-            const funcName = call.name;
-            const funcArgs = call.args || {};
-            const { result, dataMutated } = executeTool(funcName, funcArgs);
-
-            if (dataMutated) anyMutated = true;
-
-            executedToolCalls.push({
-              name: funcName,
-              args: funcArgs,
-              result,
-            });
-          }
-
-          // Follow up to generate final answer incorporating tool execution results
-          const firstCall = executedToolCalls[0];
-          const followUp = await ai.models.generateContent({
+        // Multi-turn agentic loop (up to 3 turns)
+        for (let turn = 0; turn < 3; turn++) {
+          const response = await ai.models.generateContent({
             model: 'gemini-3.6-flash',
-            contents: [
-              ...contentsPayload,
-              response.candidates[0].content,
-              {
-                role: 'user',
-                parts: [
-                  {
-                    functionResponse: {
-                      name: firstCall.name,
-                      response: { result: firstCall.result },
-                    },
-                  },
-                ],
-              },
-            ],
-            config: { systemInstruction },
+            contents: currentContents,
+            config: {
+              systemInstruction,
+              tools: GEMINI_TOOLS,
+            },
           });
 
-          return NextResponse.json({
-            reply: followUp.text || 'Action completed successfully.',
-            toolCalls: executedToolCalls,
-            dataMutated: anyMutated,
-          });
+          const functionCalls = response.functionCalls;
+
+          if (functionCalls && functionCalls.length > 0) {
+            // Append assistant model turn with function calls
+            if (response.candidates?.[0]?.content) {
+              currentContents.push(response.candidates[0].content);
+            }
+
+            // Execute all functions generated in this turn
+            const toolResponseParts: any[] = [];
+            for (const call of functionCalls) {
+              const funcName = call.name;
+              const funcArgs = call.args || {};
+              const { result, dataMutated } = executeTool(funcName, funcArgs);
+
+              if (dataMutated) anyMutated = true;
+
+              allExecutedToolCalls.push({
+                name: funcName,
+                args: funcArgs,
+                result,
+              });
+
+              toolResponseParts.push({
+                functionResponse: {
+                  name: funcName,
+                  response: { result },
+                  id: (call as any).id,
+                },
+              });
+            }
+
+            // Append user turn containing functionResponse parts for ALL function calls
+            currentContents.push({
+              role: 'user',
+              parts: toolResponseParts,
+            });
+          } else {
+            finalReply = response.text || '';
+            break;
+          }
         }
 
-        if (response.text) {
+        if (finalReply && finalReply.trim()) {
           return NextResponse.json({
-            reply: response.text,
-            toolCalls: [],
-            dataMutated: false,
+            reply: finalReply,
+            toolCalls: allExecutedToolCalls,
+            dataMutated: anyMutated,
           });
         }
       } catch (geminiError: any) {
