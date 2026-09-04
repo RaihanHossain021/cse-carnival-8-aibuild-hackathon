@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { Schedule, Room, Event, Announcement, Assignment, Booking, Registration } from '@/types';
+import { supabase } from './supabase';
 
 type Collection = 'schedules' | 'rooms' | 'events' | 'announcements' | 'assignments';
 type StoredRecord = { id: string; record: unknown };
@@ -15,11 +16,63 @@ const FILES: Record<Collection, string> = {
   assignments: 'assignments.json',
 };
 
-function supabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Add them to .env.local.');
+// Asynchronously sync mutations to Supabase PostgreSQL cloud database
+export async function syncToSupabase(table: string, id: string, record?: any, op: 'upsert' | 'delete' = 'upsert') {
+  if (!supabase) return;
+  try {
+    if (op === 'delete') {
+      await supabase.from(table).delete().eq('id', id);
+    } else if (record) {
+      await supabase.from(table).upsert({ id, record, updated_at: new Date().toISOString() });
+    }
+  } catch (err) {
+    console.error(`Supabase sync error on ${table}:`, err);
+  }
+}
+
+// Pull latest records from Supabase into local cache
+export async function syncFromSupabase(): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const tableKeys = [
+      { key: 'schedules', file: FILES.schedules },
+      { key: 'rooms', file: FILES.rooms },
+      { key: 'events', file: FILES.events },
+      { key: 'announcements', file: FILES.announcements },
+      { key: 'assignments', file: FILES.assignments },
+    ];
+    for (const item of tableKeys) {
+      const { data, error } = await supabase.from(item.key).select('*');
+      if (!error && data && data.length > 0) {
+        const records = data.map((r: any) => r.record);
+        writeStorage(item.file, records);
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error('Error in syncFromSupabase:', err);
+    return false;
+  }
+}
+
+// Ensure storage directory exists and seed files are initialized
+export function initDatabase() {
+  if (!fs.existsSync(STORAGE_DIR)) {
+    fs.mkdirSync(STORAGE_DIR, { recursive: true });
+  }
+
+  for (const [key, filename] of Object.entries(FILES)) {
+    const targetFile = path.join(STORAGE_DIR, filename);
+    const seedFile = path.join(SEED_DIR, filename);
+
+    if (!fs.existsSync(targetFile)) {
+      if (fs.existsSync(seedFile)) {
+        const content = fs.readFileSync(seedFile, 'utf-8');
+        fs.writeFileSync(targetFile, content, 'utf-8');
+      } else {
+        fs.writeFileSync(targetFile, JSON.stringify([], null, 2), 'utf-8');
+      }
+    }
   }
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
@@ -51,11 +104,39 @@ async function updateRecord<T extends { id: string }>(collection: Collection, id
   return items[index];
 }
 
-async function deleteRecord<T extends { id: string }>(collection: Collection, id: string): Promise<boolean> {
-  const items = await readCollection<T>(collection);
-  const filtered = items.filter((item) => item.id !== id);
+// --- SCHEDULES ---
+export function getSchedules(): Schedule[] {
+  return readStorage<Schedule>(FILES.schedules);
+}
+export function saveSchedules(items: Schedule[]): void {
+  writeStorage<Schedule>(FILES.schedules, items);
+}
+export function addSchedule(item: Omit<Schedule, 'id'> & { id?: string }): Schedule {
+  const items = getSchedules();
+  const newItem: Schedule = {
+    ...item,
+    id: item.id || `sch-${Date.now().toString().slice(-4)}`,
+  };
+  items.push(newItem);
+  saveSchedules(items);
+  syncToSupabase('schedules', newItem.id, newItem);
+  return newItem;
+}
+export function updateSchedule(id: string, updates: Partial<Schedule>): Schedule | null {
+  const items = getSchedules();
+  const idx = items.findIndex((i) => i.id === id);
+  if (idx === -1) return null;
+  items[idx] = { ...items[idx], ...updates };
+  saveSchedules(items);
+  syncToSupabase('schedules', id, items[idx]);
+  return items[idx];
+}
+export function deleteSchedule(id: string): boolean {
+  const items = getSchedules();
+  const filtered = items.filter((i) => i.id !== id);
   if (filtered.length === items.length) return false;
-  await writeCollection(collection, filtered);
+  saveSchedules(filtered);
+  syncToSupabase('schedules', id, null, 'delete');
   return true;
 }
 
@@ -63,6 +144,52 @@ async function seedCollection<T extends { id: string }>(collection: Collection):
   const contents = await fs.readFile(path.join(SEED_DIR, FILES[collection]), 'utf-8');
   return JSON.parse(contents) as T[];
 }
+export function addRoom(item: Omit<Room, 'id' | 'bookings'> & { id?: string; bookings?: Booking[] }): Room {
+  const items = getRooms();
+  const newItem: Room = {
+    ...item,
+    id: item.id || `room-${Date.now().toString().slice(-4)}`,
+    bookings: item.bookings || [],
+  };
+  items.push(newItem);
+  saveRooms(items);
+  syncToSupabase('rooms', newItem.id, newItem);
+  return newItem;
+}
+export function updateRoom(id: string, updates: Partial<Room>): Room | null {
+  const items = getRooms();
+  const idx = items.findIndex((i) => i.id === id);
+  if (idx === -1) return null;
+  items[idx] = { ...items[idx], ...updates };
+  saveRooms(items);
+  syncToSupabase('rooms', id, items[idx]);
+  return items[idx];
+}
+export function deleteRoom(id: string): boolean {
+  const items = getRooms();
+  const filtered = items.filter((i) => i.id !== id);
+  if (filtered.length === items.length) return false;
+  saveRooms(filtered);
+  syncToSupabase('rooms', id, null, 'delete');
+  return true;
+}
+export function bookRoom(
+  roomNumber: string,
+  booking: Omit<Booking, 'booking_id'> & { booking_id?: string }
+): { success: boolean; message: string; booking?: Booking } {
+  const rooms = getRooms();
+  const room = rooms.find((r) => r.room_number.toLowerCase() === roomNumber.toLowerCase() || r.id === roomNumber);
+  if (!room) {
+    return { success: false, message: `Room ${roomNumber} not found.` };
+  }
+
+  // Check collision with existing bookings for this room
+  const collision = room.bookings?.some((b) => {
+    if (b.date !== booking.date) return false;
+    // Overlap if max(start1, start2) < min(end1, end2)
+    return Math.max(timeToMinutes(b.start_time), timeToMinutes(booking.start_time)) <
+           Math.min(timeToMinutes(b.end_time), timeToMinutes(booking.end_time));
+  });
 
 export async function resetToSeed(): Promise<void> {
   for (const collection of Object.keys(FILES) as Collection[]) {
@@ -80,55 +207,86 @@ export async function addSchedule(item: Omit<Schedule, 'id'> & { id?: string }):
 export async function updateSchedule(id: string, updates: Partial<Schedule>): Promise<Schedule | null> { return updateRecord('schedules', id, updates); }
 export async function deleteSchedule(id: string): Promise<boolean> { return deleteRecord<Schedule>('schedules', id); }
 
-export async function getRooms(): Promise<Room[]> { return readCollection<Room>('rooms'); }
-export async function saveRooms(items: Room[]): Promise<void> { return writeCollection('rooms', items); }
-export async function addRoom(item: Omit<Room, 'id' | 'bookings'> & { id?: string; bookings?: Booking[] }): Promise<Room> {
-  const newItem = { ...item, id: item.id || `room-${Date.now().toString().slice(-4)}`, bookings: item.bookings || [] } as Room;
-  await saveRooms([...(await getRooms()), newItem]);
-  return newItem;
-}
-export async function updateRoom(id: string, updates: Partial<Room>): Promise<Room | null> { return updateRecord('rooms', id, updates); }
-export async function deleteRoom(id: string): Promise<boolean> { return deleteRecord<Room>('rooms', id); }
-export async function bookRoom(roomNumber: string, booking: Omit<Booking, 'booking_id'> & { booking_id?: string }): Promise<{ success: boolean; message: string; booking?: Booking }> {
-  const rooms = await getRooms();
-  const room = rooms.find((item) => item.room_number.toLowerCase() === roomNumber.toLowerCase() || item.id === roomNumber);
-  if (!room) return { success: false, message: `Room ${roomNumber} not found.` };
-  const collision = room.bookings?.some((existing) => existing.date === booking.date &&
-    Math.max(timeToMinutes(existing.start_time), timeToMinutes(booking.start_time)) <
-    Math.min(timeToMinutes(existing.end_time), timeToMinutes(booking.end_time)));
-  if (collision) return { success: false, message: `Room ${room.room_number} is already booked during this time on ${booking.date}.` };
-  const newBooking = { ...booking, booking_id: booking.booking_id || `bk-${Date.now().toString().slice(-4)}` } as Booking;
-  room.bookings = [...(room.bookings || []), newBooking];
-  await saveRooms(rooms);
+  room.bookings = room.bookings || [];
+  room.bookings.push(newBooking);
+  saveRooms(rooms);
+  syncToSupabase('rooms', room.id, room);
   return { success: true, message: `Room ${room.room_number} booked successfully!`, booking: newBooking };
 }
 export async function cancelBooking(bookingId: string): Promise<{ success: boolean; message: string }> {
   const rooms = await getRooms();
   let found = false;
+  let targetRoom: Room | null = null;
   for (const room of rooms) {
-    const bookings = room.bookings || [];
-    room.bookings = bookings.filter((booking) => booking.booking_id !== bookingId);
-    if (room.bookings.length < bookings.length) { found = true; break; }
+    if (room.bookings) {
+      const initLen = room.bookings.length;
+      room.bookings = room.bookings.filter((b) => b.booking_id !== bookingId);
+      if (room.bookings.length < initLen) {
+        found = true;
+        targetRoom = room;
+        break;
+      }
+    }
+  }
+  if (found && targetRoom) {
+    saveRooms(rooms);
+    syncToSupabase('rooms', targetRoom.id, targetRoom);
+    return { success: true, message: `Booking ${bookingId} cancelled successfully.` };
   }
   if (!found) return { success: false, message: `Booking ${bookingId} not found.` };
   await saveRooms(rooms);
   return { success: true, message: `Booking ${bookingId} cancelled successfully.` };
 }
 
-export async function getEvents(): Promise<Event[]> { return readCollection<Event>('events'); }
-export async function saveEvents(items: Event[]): Promise<void> { return writeCollection('events', items); }
-export async function addEvent(item: Omit<Event, 'id' | 'registered' | 'registrations'> & { id?: string }): Promise<Event> {
-  const newItem = { ...item, id: item.id || `evt-${Date.now().toString().slice(-4)}`, registered: 0, registrations: [] } as Event;
-  await saveEvents([...(await getEvents()), newItem]);
+// --- EVENTS ---
+export function getEvents(): Event[] {
+  return readStorage<Event>(FILES.events);
+}
+export function saveEvents(items: Event[]): void {
+  writeStorage<Event>(FILES.events, items);
+}
+export function addEvent(item: Omit<Event, 'id' | 'registered' | 'registrations'> & { id?: string }): Event {
+  const items = getEvents();
+  const newItem: Event = {
+    ...item,
+    id: item.id || `evt-${Date.now().toString().slice(-4)}`,
+    registered: 0,
+    registrations: [],
+  };
+  items.push(newItem);
+  saveEvents(items);
+  syncToSupabase('events', newItem.id, newItem);
   return newItem;
 }
-export async function updateEvent(id: string, updates: Partial<Event>): Promise<Event | null> { return updateRecord('events', id, updates); }
-export async function deleteEvent(id: string): Promise<boolean> { return deleteRecord<Event>('events', id); }
-export async function registerForEvent(eventId: string, registration: Registration): Promise<{ success: boolean; message: string; event?: Event }> {
-  const events = await getEvents();
-  const event = events.find((item) => item.id === eventId || item.name.toLowerCase() === eventId.toLowerCase());
-  if (!event) return { success: false, message: `Event '${eventId}' not found.` };
-  if (event.status === 'cancelled') return { success: false, message: `Cannot register: Event '${event.name}' has been cancelled.` };
+export function updateEvent(id: string, updates: Partial<Event>): Event | null {
+  const items = getEvents();
+  const idx = items.findIndex((i) => i.id === id);
+  if (idx === -1) return null;
+  items[idx] = { ...items[idx], ...updates };
+  saveEvents(items);
+  syncToSupabase('events', id, items[idx]);
+  return items[idx];
+}
+export function deleteEvent(id: string): boolean {
+  const items = getEvents();
+  const filtered = items.filter((i) => i.id !== id);
+  if (filtered.length === items.length) return false;
+  saveEvents(filtered);
+  syncToSupabase('events', id, null, 'delete');
+  return true;
+}
+export function registerForEvent(
+  eventId: string,
+  registration: Registration
+): { success: boolean; message: string; event?: Event } {
+  const events = getEvents();
+  const event = events.find((e) => e.id === eventId || e.name.toLowerCase() === eventId.toLowerCase());
+  if (!event) {
+    return { success: false, message: `Event '${eventId}' not found.` };
+  }
+  if (event.status === 'cancelled') {
+    return { success: false, message: `Cannot register: Event '${event.name}' has been cancelled.` };
+  }
   if (event.registered >= event.capacity) {
     event.status = 'full';
     await saveEvents(events);
@@ -140,42 +298,108 @@ export async function registerForEvent(eventId: string, registration: Registrati
   }
   event.registrations.push(registration);
   event.registered = event.registrations.length;
-  if (event.registered >= event.capacity) event.status = 'full';
-  await saveEvents(events);
+  if (event.registered >= event.capacity) {
+    event.status = 'full';
+  }
+  saveEvents(events);
+  syncToSupabase('events', event.id, event);
   return { success: true, message: `Successfully registered for '${event.name}'!`, event };
 }
-export async function cancelEventRegistration(eventId: string, studentId: string): Promise<{ success: boolean; message: string }> {
-  const events = await getEvents();
-  const event = events.find((item) => item.id === eventId);
-  if (!event?.registrations) return { success: false, message: 'Event or registration not found.' };
-  const initialLength = event.registrations.length;
-  event.registrations = event.registrations.filter((item) => item.student_id !== studentId);
-  if (event.registrations.length === initialLength) return { success: false, message: `Registration for student ${studentId} not found.` };
-  event.registered = event.registrations.length;
-  if (event.status === 'full' && event.registered < event.capacity) event.status = 'upcoming';
-  await saveEvents(events);
-  return { success: true, message: 'Registration cancelled successfully.' };
+
+export function cancelEventRegistration(
+  eventId: string,
+  studentId: string
+): { success: boolean; message: string } {
+  const events = getEvents();
+  const event = events.find((e) => e.id === eventId);
+  if (!event || !event.registrations) {
+    return { success: false, message: `Event or registration not found.` };
+  }
+  const initLen = event.registrations.length;
+  event.registrations = event.registrations.filter((r) => r.student_id !== studentId);
+  if (event.registrations.length < initLen) {
+    event.registered = event.registrations.length;
+    if (event.status === 'full' && event.registered < event.capacity) {
+      event.status = 'upcoming';
+    }
+    saveEvents(events);
+    syncToSupabase('events', event.id, event);
+    return { success: true, message: `Registration cancelled successfully.` };
+  }
+  return { success: false, message: `Registration for student ${studentId} not found.` };
 }
 
-export async function getAnnouncements(): Promise<Announcement[]> { return readCollection<Announcement>('announcements'); }
-export async function saveAnnouncements(items: Announcement[]): Promise<void> { return writeCollection('announcements', items); }
-export async function addAnnouncement(item: Omit<Announcement, 'id'> & { id?: string }): Promise<Announcement> {
-  const newItem = { ...item, id: item.id || `ann-${Date.now().toString().slice(-4)}` } as Announcement;
-  await saveAnnouncements([...(await getAnnouncements()), newItem]);
+// --- ANNOUNCEMENTS ---
+export function getAnnouncements(): Announcement[] {
+  return readStorage<Announcement>(FILES.announcements);
+}
+export function saveAnnouncements(items: Announcement[]): void {
+  writeStorage<Announcement>(FILES.announcements, items);
+}
+export function addAnnouncement(item: Omit<Announcement, 'id'> & { id?: string }): Announcement {
+  const items = getAnnouncements();
+  const newItem: Announcement = {
+    ...item,
+    id: item.id || `ann-${Date.now().toString().slice(-4)}`,
+  };
+  items.push(newItem);
+  saveAnnouncements(items);
+  syncToSupabase('announcements', newItem.id, newItem);
   return newItem;
 }
-export async function updateAnnouncement(id: string, updates: Partial<Announcement>): Promise<Announcement | null> { return updateRecord('announcements', id, updates); }
-export async function deleteAnnouncement(id: string): Promise<boolean> { return deleteRecord<Announcement>('announcements', id); }
+export function updateAnnouncement(id: string, updates: Partial<Announcement>): Announcement | null {
+  const items = getAnnouncements();
+  const idx = items.findIndex((i) => i.id === id);
+  if (idx === -1) return null;
+  items[idx] = { ...items[idx], ...updates };
+  saveAnnouncements(items);
+  syncToSupabase('announcements', id, items[idx]);
+  return items[idx];
+}
+export function deleteAnnouncement(id: string): boolean {
+  const items = getAnnouncements();
+  const filtered = items.filter((i) => i.id !== id);
+  if (filtered.length === items.length) return false;
+  saveAnnouncements(filtered);
+  syncToSupabase('announcements', id, null, 'delete');
+  return true;
+}
 
-export async function getAssignments(): Promise<Assignment[]> { return readCollection<Assignment>('assignments'); }
-export async function saveAssignments(items: Assignment[]): Promise<void> { return writeCollection('assignments', items); }
-export async function addAssignment(item: Omit<Assignment, 'id'> & { id?: string }): Promise<Assignment> {
-  const newItem = { ...item, id: item.id || `asgn-${Date.now().toString().slice(-4)}` } as Assignment;
-  await saveAssignments([...(await getAssignments()), newItem]);
+// --- ASSIGNMENTS ---
+export function getAssignments(): Assignment[] {
+  return readStorage<Assignment>(FILES.assignments);
+}
+export function saveAssignments(items: Assignment[]): void {
+  writeStorage<Assignment>(FILES.assignments, items);
+}
+export function addAssignment(item: Omit<Assignment, 'id'> & { id?: string }): Assignment {
+  const items = getAssignments();
+  const newItem: Assignment = {
+    ...item,
+    id: item.id || `asgn-${Date.now().toString().slice(-4)}`,
+  };
+  items.push(newItem);
+  saveAssignments(items);
+  syncToSupabase('assignments', newItem.id, newItem);
   return newItem;
 }
-export async function updateAssignment(id: string, updates: Partial<Assignment>): Promise<Assignment | null> { return updateRecord('assignments', id, updates); }
-export async function deleteAssignment(id: string): Promise<boolean> { return deleteRecord<Assignment>('assignments', id); }
+export function updateAssignment(id: string, updates: Partial<Assignment>): Assignment | null {
+  const items = getAssignments();
+  const idx = items.findIndex((i) => i.id === id);
+  if (idx === -1) return null;
+  items[idx] = { ...items[idx], ...updates };
+  saveAssignments(items);
+  syncToSupabase('assignments', id, items[idx]);
+  return items[idx];
+}
+export function deleteAssignment(id: string): boolean {
+  const items = getAssignments();
+  const filtered = items.filter((i) => i.id !== id);
+  if (filtered.length === items.length) return false;
+  saveAssignments(filtered);
+  syncToSupabase('assignments', id, null, 'delete');
+  return true;
+}
 
 export function timeToMinutes(timeStr: string): number {
   if (!timeStr) return 0;

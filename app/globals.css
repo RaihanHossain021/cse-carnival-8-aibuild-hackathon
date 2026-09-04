@@ -6,9 +6,70 @@
   --font-inter: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+/* Ocean Pearl - Aura */
+/* Base color on BODY - blend modes composite against this */
 body {
   font-family: var(--font-inter);
-  transition: background-color 0.2s ease, color 0.2s ease;
+  background-color: #faf8f2;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+html.dark body {
+  background-color: #080c16;
+}
+
+/* Aura Background Container */
+.aura-bg {
+  position: relative;
+  overflow: hidden;
+  min-height: 100vh;
+  /* NO background-color - layers blend against body */
+}
+
+/* Layer 1 - multiply */
+.aura-layer-1 {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(0,0,0,0) 0%, rgba(178,235,242,0.12) 28%, rgb(255,255,255) 18%, rgb(77,182,200) 68%, rgb(45,100,130) 100%);
+  mix-blend-mode: multiply;
+  filter: blur(90px);
+  transform: translateZ(0);
+  will-change: transform;
+  pointer-events: none;
+}
+
+@media (min-width: 768px) {
+  .aura-layer-1 {
+    filter: blur(130px);
+  }
+}
+
+html.dark .aura-layer-1 {
+  mix-blend-mode: screen;
+  opacity: 0.18;
+}
+
+/* Layer 2 - multiply */
+.aura-layer-2 {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(0,0,0,0) 0%, rgba(178,235,242,0.22) 34%, rgb(255,255,255) 66%, rgb(77,182,200) 82%, rgb(45,100,130) 100%);
+  mix-blend-mode: multiply;
+  filter: blur(90px);
+  transform: translateZ(0);
+  will-change: transform;
+  pointer-events: none;
+}
+
+@media (min-width: 768px) {
+  .aura-layer-2 {
+    filter: blur(130px);
+  }
+}
+
+html.dark .aura-layer-2 {
+  mix-blend-mode: screen;
+  opacity: 0.25;
 }
 
 /* Custom modern scrollbars */
@@ -27,7 +88,7 @@ body {
   background: rgba(148, 163, 184, 0.5);
 }
 
-.glass-panel {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+.glass-nav {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }

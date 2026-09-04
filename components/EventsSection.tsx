@@ -7,6 +7,7 @@ import {
   Plus,
   Search,
   Calendar,
+  CalendarDays,
   Clock,
   MapPin,
   UserCheck,
@@ -15,7 +16,8 @@ import {
   X,
   Check,
   AlertCircle,
-  Users
+  Users,
+  ArrowRight
 } from 'lucide-react';
 
 interface EventsSectionProps {
@@ -39,11 +41,17 @@ export default function EventsSection({
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modals
+  const [selectedEventDetails, setSelectedEventDetails] = useState<Event | null>(null);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [registeringTarget, setRegisteringTarget] = useState<Event | null>(null);
   const [regError, setRegError] = useState('');
   const [regSuccess, setRegSuccess] = useState('');
+
+  // Live lookup
+  const activeEvent = selectedEventDetails
+    ? events.find((e) => e.id === selectedEventDetails.id) || selectedEventDetails
+    : null;
 
   // Forms
   const [eventFormData, setEventFormData] = useState({
@@ -209,112 +217,77 @@ export default function EventsSection({
             return (
               <div
                 key={evt.id}
-                className="group p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-purple-300 dark:hover:border-purple-700 transition-all flex flex-col justify-between"
+                onClick={() => setSelectedEventDetails(evt)}
+                className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border border-slate-200/80 dark:border-slate-800/80 shadow-sm hover:shadow-xl hover:border-purple-400 dark:hover:border-purple-500 transition-all duration-200 cursor-pointer group flex flex-col justify-between space-y-3.5"
               >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
                     <span
-                      className={`text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full border ${
+                      className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full border ${
                         isCancelled
-                          ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/80 dark:text-rose-400 border-rose-200 dark:border-rose-800'
+                          ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/80 dark:text-rose-300 dark:border-rose-800'
                           : isFull
-                          ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/80 dark:text-amber-400 border-amber-200 dark:border-amber-800'
-                          : 'bg-purple-50 text-purple-600 dark:bg-purple-950/80 dark:text-purple-400 border-purple-200 dark:border-purple-800'
+                          ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800'
+                          : 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-800'
                       }`}
                     >
                       {evt.status}
                     </span>
 
-                    <div className="flex items-center space-x-1">
+                    <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => openEditModal(evt)}
                         title="Edit Event"
-                        className="p-1 rounded-md text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => onDeleteEvent(evt.id)}
                         title="Delete Event"
-                        className="p-1 rounded-md text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
-                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors leading-snug">
                     {evt.name}
                   </h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 line-clamp-2">
+
+                  <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">
                     {evt.description}
                   </p>
 
-                  <div className="mt-3 space-y-1.5 text-xs text-slate-500 dark:text-slate-400">
-                    <div className="flex items-center space-x-2">
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-xs text-slate-600 dark:text-slate-300">
+                    <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 font-medium">
                       <Calendar className="w-3.5 h-3.5 text-purple-500" />
                       <span>{evt.date}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
+                    </span>
+                    <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 font-mono text-[11px]">
                       <Clock className="w-3.5 h-3.5 text-sky-500" />
-                      <span className="font-mono">{evt.start_time} - {evt.end_time}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
+                      <span>{evt.start_time}</span>
+                    </span>
+                    <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 font-medium">
                       <MapPin className="w-3.5 h-3.5 text-rose-500" />
                       <span>Room {evt.venue}</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-[11px]">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">By:</span>
-                      <span className="truncate">{evt.organizer}</span>
-                    </div>
+                    </span>
                   </div>
 
-                  {/* Capacity Progress */}
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
-                      <span>Seats Reserved:</span>
-                      <span className="text-slate-800 dark:text-slate-200">
-                        {evt.registered || 0} / {evt.capacity} ({pct}%)
-                      </span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          isFull ? 'bg-amber-500' : 'bg-gradient-to-r from-purple-500 to-indigo-500'
-                        }`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden mt-1">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        isFull ? 'bg-amber-500' : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                      }`}
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
-
-                  {/* Registered Students Mini List */}
-                  {evt.registrations && evt.registrations.length > 0 && (
-                    <div className="mt-3 text-[10px] text-slate-500">
-                      <span className="font-semibold text-slate-600 dark:text-slate-400">Attendees: </span>
-                      <span>
-                        {evt.registrations.slice(0, 3).map((r) => r.name).join(', ')}
-                        {evt.registrations.length > 3 && ` +${evt.registrations.length - 3} more`}
-                      </span>
-                    </div>
-                  )}
                 </div>
 
-                {/* Register Button */}
-                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <button
-                    disabled={isFull || isCancelled}
-                    onClick={() => openRegisterModal(evt)}
-                    className={`w-full py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 shadow-sm ${
-                      isFull || isCancelled
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                        : 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-500/20 active:scale-95'
-                    }`}
-                  >
-                    <UserCheck className="w-4 h-4" />
-                    <span>
-                      {isCancelled ? 'Event Cancelled' : isFull ? 'Event Full' : 'Register Now'}
-                    </span>
-                  </button>
+                <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-purple-600 dark:text-purple-400 font-semibold group-hover:translate-x-0.5 transition-transform">
+                  <span>{evt.registered || 0}/{evt.capacity} seats · View Details & Register</span>
+                  <ArrowRight className="w-4 h-4" />
                 </div>
               </div>
             );
@@ -565,6 +538,179 @@ export default function EventsSection({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: EVENT DETAILS WINDOW                                               */}
+      {/* ========================================================================= */}
+      {activeEvent && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedEventDetails(null);
+          }}
+        >
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center space-x-2">
+                  <span
+                    className={`text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full border ${
+                      activeEvent.status === 'cancelled'
+                        ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/80 dark:text-rose-400 border-rose-200 dark:border-rose-800'
+                        : activeEvent.registered >= activeEvent.capacity || activeEvent.status === 'full'
+                        ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/80 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                        : 'bg-purple-50 text-purple-600 dark:bg-purple-950/80 dark:text-purple-400 border-purple-200 dark:border-purple-800'
+                    }`}
+                  >
+                    {activeEvent.status}
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Organized by <strong className="text-slate-700 dark:text-slate-300">{activeEvent.organizer}</strong>
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-snug">
+                  {activeEvent.name}
+                </h2>
+              </div>
+              <button
+                onClick={() => setSelectedEventDetails(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Description */}
+            <div className="space-y-1">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">About this Event</h4>
+              <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                {activeEvent.description}
+              </p>
+            </div>
+
+            {/* Key Info Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="p-3 rounded-2xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/40 space-y-1">
+                <div className="flex items-center space-x-1.5 text-xs text-purple-600 dark:text-purple-400 font-semibold">
+                  <CalendarDays className="w-4 h-4" />
+                  <span>Date</span>
+                </div>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">{activeEvent.date}</p>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-sky-50/70 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900/40 space-y-1">
+                <div className="flex items-center space-x-1.5 text-xs text-sky-600 dark:text-sky-400 font-semibold">
+                  <Clock className="w-4 h-4" />
+                  <span>Time</span>
+                </div>
+                <p className="text-xs font-bold text-slate-900 dark:text-white font-mono">{activeEvent.start_time} - {activeEvent.end_time}</p>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-rose-50/70 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/40 space-y-1">
+                <div className="flex items-center space-x-1.5 text-xs text-rose-600 dark:text-rose-400 font-semibold">
+                  <MapPin className="w-4 h-4" />
+                  <span>Venue</span>
+                </div>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">Room {activeEvent.venue}</p>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/40 space-y-1">
+                <div className="flex items-center space-x-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <Users className="w-4 h-4" />
+                  <span>Capacity</span>
+                </div>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">{activeEvent.registered || 0} / {activeEvent.capacity}</p>
+              </div>
+            </div>
+
+            {/* Capacity Progress */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                <span>Reserved Seats:</span>
+                <span className="text-purple-600 dark:text-purple-400 font-bold">
+                  {Math.min(100, Math.round(((activeEvent.registered || 0) / activeEvent.capacity) * 100))}% full
+                </span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-300 ${
+                    activeEvent.registered >= activeEvent.capacity ? 'bg-amber-500' : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                  }`}
+                  style={{ width: `${Math.min(100, Math.round(((activeEvent.registered || 0) / activeEvent.capacity) * 100))}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Registered Attendees */}
+            <div className="space-y-2">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Registered Attendees ({activeEvent.registrations?.length || 0})
+              </h4>
+              {(!activeEvent.registrations || activeEvent.registrations.length === 0) ? (
+                <p className="text-xs text-slate-500 italic p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                  No students registered yet.
+                </p>
+              ) : (
+                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                  {activeEvent.registrations.map((reg, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60 text-xs"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-bold text-[10px] flex items-center justify-center">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{reg.name}</span>
+                          <span className="font-mono text-[11px] text-slate-500 ml-1.5">({reg.student_id})</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          await onCancelRegistration(activeEvent.id, reg.student_id);
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Action Bar */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+              <button
+                onClick={() => {
+                  setSelectedEventDetails(null);
+                  openEditModal(activeEvent);
+                }}
+                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Edit Event
+              </button>
+
+              <button
+                disabled={activeEvent.registered >= activeEvent.capacity || activeEvent.status === 'cancelled'}
+                onClick={() => {
+                  setSelectedEventDetails(null);
+                  openRegisterModal(activeEvent);
+                }}
+                className={`px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-md ${
+                  activeEvent.registered >= activeEvent.capacity || activeEvent.status === 'cancelled'
+                    ? 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400 cursor-not-allowed'
+                    : 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/20'
+                }`}
+              >
+                {activeEvent.status === 'cancelled' ? 'Event Cancelled' : activeEvent.registered >= activeEvent.capacity ? 'Event Full' : 'Register Now'}
+              </button>
+            </div>
           </div>
         </div>
       )}
