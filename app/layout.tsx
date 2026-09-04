@@ -22,7 +22,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased transition-colors duration-200">
+      <body className="min-h-screen text-slate-900 dark:text-slate-100 antialiased selection:bg-teal-500/20 selection:text-teal-900 dark:selection:text-teal-200">
         <ThemeProvider>
           {children}
         </ThemeProvider>

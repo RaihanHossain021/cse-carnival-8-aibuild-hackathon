@@ -339,18 +339,24 @@ export default function CampusDashboard({
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-200">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-semibold shadow-2xl animate-bounce">
-          {toastMessage.type === 'success' ? (
-            <Check className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-rose-400 dark:text-rose-600" />
-          )}
-          <span>{toastMessage.text}</span>
-        </div>
-      )}
+    <div className="aura-bg min-h-screen flex flex-col text-slate-900 dark:text-slate-100 transition-colors duration-200">
+      {/* Ocean Pearl Aura Gradient - Layer 1 & 2 */}
+      <div className="aura-layer-1" aria-hidden="true" />
+      <div className="aura-layer-2" aria-hidden="true" />
+
+      {/* Page Content sitting above aura blend layers */}
+      <div className="relative z-10 flex flex-col flex-1">
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-semibold shadow-2xl animate-bounce">
+            {toastMessage.type === 'success' ? (
+              <Check className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-400 dark:text-rose-600" />
+            )}
+            <span>{toastMessage.text}</span>
+          </div>
+        )}
 
       {/* Top Navbar */}
       <Navbar
@@ -444,7 +450,7 @@ export default function CampusDashboard({
       )}
 
       {/* Footer */}
-      <footer className="w-full border-t border-slate-200 dark:border-slate-800/80 py-4 text-center text-xs text-slate-500 dark:text-slate-500">
+      <footer className="w-full border-t border-slate-200/60 dark:border-slate-800/80 py-4 text-center text-xs text-slate-500 dark:text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>CampusOS &copy; 2026 — Built for AI Build Hackathon (CSE Carnival 8)</span>
           <span className="font-mono text-[11px] text-sky-600 dark:text-sky-400">
@@ -452,6 +458,7 @@ export default function CampusDashboard({
           </span>
         </div>
       </footer>
+      </div>
     </div>
   );
 }

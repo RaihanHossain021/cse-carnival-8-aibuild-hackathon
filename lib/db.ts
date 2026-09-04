@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Schedule, Room, Event, Announcement, Assignment, Booking, Registration } from '@/types';
+import { supabase } from './supabase';
 
 const SEED_DIR = path.join(process.cwd(), 'data');
 const STORAGE_DIR = path.join(process.cwd(), 'storage');
@@ -12,6 +13,45 @@ const FILES = {
   announcements: 'announcements.json',
   assignments: 'assignments.json',
 };
+
+// Asynchronously sync mutations to Supabase PostgreSQL cloud database
+export async function syncToSupabase(table: string, id: string, record?: any, op: 'upsert' | 'delete' = 'upsert') {
+  if (!supabase) return;
+  try {
+    if (op === 'delete') {
+      await supabase.from(table).delete().eq('id', id);
+    } else if (record) {
+      await supabase.from(table).upsert({ id, record, updated_at: new Date().toISOString() });
+    }
+  } catch (err) {
+    console.error(`Supabase sync error on ${table}:`, err);
+  }
+}
+
+// Pull latest records from Supabase into local cache
+export async function syncFromSupabase(): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const tableKeys = [
+      { key: 'schedules', file: FILES.schedules },
+      { key: 'rooms', file: FILES.rooms },
+      { key: 'events', file: FILES.events },
+      { key: 'announcements', file: FILES.announcements },
+      { key: 'assignments', file: FILES.assignments },
+    ];
+    for (const item of tableKeys) {
+      const { data, error } = await supabase.from(item.key).select('*');
+      if (!error && data && data.length > 0) {
+        const records = data.map((r: any) => r.record);
+        writeStorage(item.file, records);
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error('Error in syncFromSupabase:', err);
+    return false;
+  }
+}
 
 // Ensure storage directory exists and seed files are initialized
 export function initDatabase() {
@@ -82,6 +122,7 @@ export function addSchedule(item: Omit<Schedule, 'id'> & { id?: string }): Sched
   };
   items.push(newItem);
   saveSchedules(items);
+  syncToSupabase('schedules', newItem.id, newItem);
   return newItem;
 }
 export function updateSchedule(id: string, updates: Partial<Schedule>): Schedule | null {
@@ -90,6 +131,7 @@ export function updateSchedule(id: string, updates: Partial<Schedule>): Schedule
   if (idx === -1) return null;
   items[idx] = { ...items[idx], ...updates };
   saveSchedules(items);
+  syncToSupabase('schedules', id, items[idx]);
   return items[idx];
 }
 export function deleteSchedule(id: string): boolean {
@@ -97,6 +139,7 @@ export function deleteSchedule(id: string): boolean {
   const filtered = items.filter((i) => i.id !== id);
   if (filtered.length === items.length) return false;
   saveSchedules(filtered);
+  syncToSupabase('schedules', id, null, 'delete');
   return true;
 }
 
@@ -116,6 +159,7 @@ export function addRoom(item: Omit<Room, 'id' | 'bookings'> & { id?: string; boo
   };
   items.push(newItem);
   saveRooms(items);
+  syncToSupabase('rooms', newItem.id, newItem);
   return newItem;
 }
 export function updateRoom(id: string, updates: Partial<Room>): Room | null {
@@ -124,6 +168,7 @@ export function updateRoom(id: string, updates: Partial<Room>): Room | null {
   if (idx === -1) return null;
   items[idx] = { ...items[idx], ...updates };
   saveRooms(items);
+  syncToSupabase('rooms', id, items[idx]);
   return items[idx];
 }
 export function deleteRoom(id: string): boolean {
@@ -131,6 +176,7 @@ export function deleteRoom(id: string): boolean {
   const filtered = items.filter((i) => i.id !== id);
   if (filtered.length === items.length) return false;
   saveRooms(filtered);
+  syncToSupabase('rooms', id, null, 'delete');
   return true;
 }
 export function bookRoom(
@@ -163,24 +209,28 @@ export function bookRoom(
   room.bookings = room.bookings || [];
   room.bookings.push(newBooking);
   saveRooms(rooms);
+  syncToSupabase('rooms', room.id, room);
   return { success: true, message: `Room ${room.room_number} booked successfully!`, booking: newBooking };
 }
 
 export function cancelBooking(bookingId: string): { success: boolean; message: string } {
   const rooms = getRooms();
   let found = false;
+  let targetRoom: Room | null = null;
   for (const room of rooms) {
     if (room.bookings) {
       const initLen = room.bookings.length;
       room.bookings = room.bookings.filter((b) => b.booking_id !== bookingId);
       if (room.bookings.length < initLen) {
         found = true;
+        targetRoom = room;
         break;
       }
     }
   }
-  if (found) {
+  if (found && targetRoom) {
     saveRooms(rooms);
+    syncToSupabase('rooms', targetRoom.id, targetRoom);
     return { success: true, message: `Booking ${bookingId} cancelled successfully.` };
   }
   return { success: false, message: `Booking ${bookingId} not found.` };
@@ -203,6 +253,7 @@ export function addEvent(item: Omit<Event, 'id' | 'registered' | 'registrations'
   };
   items.push(newItem);
   saveEvents(items);
+  syncToSupabase('events', newItem.id, newItem);
   return newItem;
 }
 export function updateEvent(id: string, updates: Partial<Event>): Event | null {
@@ -211,6 +262,7 @@ export function updateEvent(id: string, updates: Partial<Event>): Event | null {
   if (idx === -1) return null;
   items[idx] = { ...items[idx], ...updates };
   saveEvents(items);
+  syncToSupabase('events', id, items[idx]);
   return items[idx];
 }
 export function deleteEvent(id: string): boolean {
@@ -218,6 +270,7 @@ export function deleteEvent(id: string): boolean {
   const filtered = items.filter((i) => i.id !== id);
   if (filtered.length === items.length) return false;
   saveEvents(filtered);
+  syncToSupabase('events', id, null, 'delete');
   return true;
 }
 export function registerForEvent(
@@ -250,6 +303,7 @@ export function registerForEvent(
     event.status = 'full';
   }
   saveEvents(events);
+  syncToSupabase('events', event.id, event);
   return { success: true, message: `Successfully registered for '${event.name}'!`, event };
 }
 
@@ -270,6 +324,7 @@ export function cancelEventRegistration(
       event.status = 'upcoming';
     }
     saveEvents(events);
+    syncToSupabase('events', event.id, event);
     return { success: true, message: `Registration cancelled successfully.` };
   }
   return { success: false, message: `Registration for student ${studentId} not found.` };
@@ -290,6 +345,7 @@ export function addAnnouncement(item: Omit<Announcement, 'id'> & { id?: string }
   };
   items.push(newItem);
   saveAnnouncements(items);
+  syncToSupabase('announcements', newItem.id, newItem);
   return newItem;
 }
 export function updateAnnouncement(id: string, updates: Partial<Announcement>): Announcement | null {
@@ -298,6 +354,7 @@ export function updateAnnouncement(id: string, updates: Partial<Announcement>): 
   if (idx === -1) return null;
   items[idx] = { ...items[idx], ...updates };
   saveAnnouncements(items);
+  syncToSupabase('announcements', id, items[idx]);
   return items[idx];
 }
 export function deleteAnnouncement(id: string): boolean {
@@ -305,6 +362,7 @@ export function deleteAnnouncement(id: string): boolean {
   const filtered = items.filter((i) => i.id !== id);
   if (filtered.length === items.length) return false;
   saveAnnouncements(filtered);
+  syncToSupabase('announcements', id, null, 'delete');
   return true;
 }
 
@@ -323,6 +381,7 @@ export function addAssignment(item: Omit<Assignment, 'id'> & { id?: string }): A
   };
   items.push(newItem);
   saveAssignments(items);
+  syncToSupabase('assignments', newItem.id, newItem);
   return newItem;
 }
 export function updateAssignment(id: string, updates: Partial<Assignment>): Assignment | null {
@@ -331,6 +390,7 @@ export function updateAssignment(id: string, updates: Partial<Assignment>): Assi
   if (idx === -1) return null;
   items[idx] = { ...items[idx], ...updates };
   saveAssignments(items);
+  syncToSupabase('assignments', id, items[idx]);
   return items[idx];
 }
 export function deleteAssignment(id: string): boolean {
@@ -338,6 +398,7 @@ export function deleteAssignment(id: string): boolean {
   const filtered = items.filter((i) => i.id !== id);
   if (filtered.length === items.length) return false;
   saveAssignments(filtered);
+  syncToSupabase('assignments', id, null, 'delete');
   return true;
 }
 

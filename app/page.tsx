@@ -1,9 +1,10 @@
-import { getSchedules, getRooms, getEvents, getAnnouncements, getAssignments } from '@/lib/db';
+import { getSchedules, getRooms, getEvents, getAnnouncements, getAssignments, syncFromSupabase } from '@/lib/db';
 import CampusDashboard from '@/components/CampusDashboard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
+  await syncFromSupabase();
   const schedules = getSchedules();
   const rooms = getRooms();
   const events = getEvents();

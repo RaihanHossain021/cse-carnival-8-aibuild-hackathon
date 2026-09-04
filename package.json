@@ -21,6 +21,9 @@
   },
   "homepage": "https://github.com/RaihanHossain021/cse-carnival-8-aibuild-hackathon#readme",
   "dependencies": {
+    "@google/genai": "^2.21.0",
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.115.0",
     "@types/node": "^26.4.1",
     "@types/react": "^19.2.18",
     "autoprefixer": "^10.5.4",
@@ -30,6 +33,8 @@
     "postcss": "^8.5.28",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwindcss": "^3.4.19",
     "typescript": "^7.0.2"
   }
