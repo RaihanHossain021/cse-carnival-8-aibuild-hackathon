@@ -1,0 +1,36 @@
+{
+  "name": "cse-carnival-8-aibuild-hackathon",
+  "version": "1.0.0",
+  "description": "An intelligent university platform powered by an AI agent that understands and acts on real-time campus data.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RaihanHossain021/cse-carnival-8-aibuild-hackathon.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/RaihanHossain021/cse-carnival-8-aibuild-hackathon/issues"
+  },
+  "homepage": "https://github.com/RaihanHossain021/cse-carnival-8-aibuild-hackathon#readme",
+  "dependencies": {
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "autoprefixer": "^10.5.4",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.41.0",
+    "next": "^16.3.4",
+    "postcss": "^8.5.28",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^7.0.2"
+  }
+}
